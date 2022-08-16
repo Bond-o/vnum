@@ -4,8 +4,8 @@ __author__ = "Mike Bond"
 __copyright__ = "Copyright (c) 2021"
 __license__ = "MIT"
 __originalDate__ = "20210829"
-__modifiedDate__ = "20210829"
-__version__ = "0.1"
+__modifiedDate__ = "20220816"
+__version__ = "0.2"
 __maintainer__ = "Mike Bond"
 __status__ = "Beta"
 
@@ -23,6 +23,7 @@ from termcolor import colored
 import urllib.request
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+import warnings
 
 
 """ Define Color Status """
@@ -33,15 +34,25 @@ complete = '\033[1m\033[92m[+]\033[0m'
 
 
 """ Functions """
-def output(results):
+def output(results,api):
     """
     The output function saves the CUCM user names to a file in the current working directory
     :param: results
+    :param: api
     :return:
     """
-    with open('cucm_users.txt', 'w') as f:
-        for row in results:
-            f.write("%s\n" % str(row))
+    if api == '2':
+        api = 'uds'
+        with open('cucm_users_uds.txt', 'w') as f:
+            for row in results:
+                f.write("%s\n" % str(row))
+    if api == '1':
+        api = 'axl'
+        with open('cucm_users_axl.txt', 'w') as f:
+            for row in results:
+                f.write("%s\n" % str(row))
+
+    print ('{0} Results saved as cucm_users_{1}.txt'.format(complete,api))
 
 
 def axl_cucm(http,target,port,alpha,context):
@@ -61,6 +72,7 @@ def axl_cucm(http,target,port,alpha,context):
             result = []
             # Incremented list to bypass CUCM limit of 32 return results per page
             num = ['0','32','63','94','125','156','187','218','249','280','311','342','373','404','435','466','497']
+            print ('{0} Please Be Patient! AXL is slow on larger directories.'.format(warning))
             # Test each number and letter in alphabet
             for alph in alpha:
                 # Produce results for every 32 user names
@@ -93,22 +105,19 @@ def uds_cucm(http,target,port,alpha,context):
     """
     try:
         print ('{0} Connecting to CUCM'.format(info))
-        url = ('{0}://{1}:{2}/ccmcip/xmldirectorylist.jsp'.format(http,target,port))
+        url = ('{0}://{1}:{2}/cucm-uds/version'.format(http,target,port))
         html = urllib.request.urlopen(url, context=context)
         if html.status == 200:
             result = []
-            num = ['0','500']
-            # Test each number and letter in alphabet
-            for alph in alpha:
-                # Produce results for every 32 user names
-                for count in num:
-                    # Issues with UDS capping at 64 totalCount in CUCM 12.5; might be a bug
-                    url = ('{0}://{1}:{2}/cucm-uds/users?last={3}&max=500&start={4}'.format(http,target,port,alph,count))
+            # Test each number and letter in alphabet for the first two characters
+            for alpha1 in alpha:
+                for alpha2 in alpha:
+                    url = ('{0}://{1}:{2}/cucm-uds/users?name={3}{4}'.format(http,target,port,alpha1,alpha2))
                     html = urllib.request.urlopen(url, context=context)
                     soup = BeautifulSoup(html, 'lxml')
                     # Append user names to a list based on name HTML tag
                     for x in soup.find_all('username'):
-                        result.append(x.string)
+                        result.append(x.text)
             return (result)
 
     except HTTPError as e:
@@ -149,9 +158,11 @@ def main():
     context = ssl._create_unverified_context()
     # Check if HTTP or HTTPS based on port argument
     http = security(args.port)
+    # Supress BeautifulSoup XML Warning
+    warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
 
     # Variables for bypassing CUCM Enterprise Paramater of "Enable All User Search = False"
-    alpha = ['a','b','c','d','e','f','g','h','i','j','k','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
+    alpha = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',
              '0','1','2','3','4','5','6','7','8','9']
 
     # Check for API input
@@ -166,7 +177,7 @@ def main():
         sys.exit(-1)
 
     # Print results to a file
-    output (res)
+    output (res,args.api)
 
 
 def print_ascii_art():
@@ -211,5 +222,5 @@ if __name__ == "__main__":
         sys.exit(-1)
     except:
         raise
-    print ('{0} Results saved as cucm_users.txt'.format(complete))
+
     exit()
